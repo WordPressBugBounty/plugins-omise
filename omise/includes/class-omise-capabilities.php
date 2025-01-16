@@ -97,13 +97,29 @@ class Omise_Capabilities {
 		if (!$wp) {
 			return false;
 		}
-
+		$ajaxActions = ['update_order_review', 'checkout'];
+		if (wp_doing_ajax() && in_array($_GET['wc-ajax'], $ajaxActions)) {
+			return true;
+		}
+		
 		$endpoints = ['checkout', 'batch', 'cart', 'cart/select-shipping-rate'];
 
 		foreach($endpoints as $endpoint) {
 			if (trim($wp->request) !== '') {
 				$len = strlen($wp->request);
 				if (strpos($wp->request, $endpoint) === $len - strlen($endpoint)) {
+					return true;
+				}
+			} else {
+				$request_uri = $_SERVER['REQUEST_URI'];
+				$home_url = home_url();
+
+				$request_uri = strtok($request_uri, '?');
+				$home_url_path = rtrim(parse_url($home_url, PHP_URL_PATH), '/');
+				$path = trim(str_replace($home_url_path, '', $request_uri), '/');
+
+				$len = strlen($path);
+				if (strpos($path, $endpoint) === $len - strlen($endpoint)) {
 					return true;
 				}
 			}
