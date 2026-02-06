@@ -20,6 +20,7 @@ abstract class Omise_Payment_Base_Card extends Omise_Payment
 	{
 		$token = isset( $_POST['omise_token'] ) ? wc_clean( $_POST['omise_token'] ) : '';
 		$card_id = isset( $_POST['card_id'] ) ? wc_clean( $_POST['card_id'] ) : '';
+		$is_wc_block = isset( $_POST['wc_block_payment'] ) && wc_string_to_bool( $_POST['wc_block_payment'] );
 
 		if (empty($token) && empty($card_id)) {
 			throw new Exception(__( 'Please select an existing card or enter new card information.', 'omise'));
@@ -36,7 +37,7 @@ abstract class Omise_Payment_Base_Card extends Omise_Payment
 			$card_id = $cardDetails['card_id'];
 		}
 
-		$data = $this->prepareChargeData($order_id, $order, $omise_customer_id, $card_id, $token);
+		$data = $this->prepareChargeData($order_id, $order, $omise_customer_id, $card_id, $token, $is_wc_block);
 		return OmiseCharge::create($data);
 	}
 
@@ -59,7 +60,7 @@ abstract class Omise_Payment_Base_Card extends Omise_Payment
 	 * @param string $card_id
 	 * @param string $token
 	 */
-	private function prepareChargeData($order_id, $order, $omise_customer_id, $card_id, $token)
+	private function prepareChargeData($order_id, $order, $omise_customer_id, $card_id, $token, $is_wc_block)
 	{
 		$currency = $order->get_currency();
 		$data = [
@@ -168,14 +169,9 @@ abstract class Omise_Payment_Base_Card extends Omise_Payment
 			return $this->payment_failed( $charge );
 		}
 
-		// If 3-D Secure feature is enabled, redirecting user out to a 3rd-party credit card authorization page.
+		// If 3-D Secure or Passkey feature is enabled, redirecting user out to a 3rd-party credit card authorization page.
 		if ( self::STATUS_PENDING === $charge['status'] && ! $charge['authorized'] && ! $charge['paid'] && ! empty( $charge['authorize_uri'] ) ) {
-			$order->add_order_note(
-				sprintf(
-					__( 'Omise: Processing a 3-D Secure payment, redirecting buyer to %s', 'omise' ),
-					esc_url( $charge['authorize_uri'] )
-				)
-			);
+			$order->add_order_note( Omise_WC_Order_Note::get_processing_authorized_uri_note( $charge ) );
 
 			return array(
 				'result'   => 'success',
@@ -197,7 +193,7 @@ abstract class Omise_Payment_Base_Card extends Omise_Payment
 							$order->get_currency()
 						)
 					);
-					$this->order->update_meta_data( 'is_awaiting_capture', 'yes' );
+					$order->update_meta_data( 'is_awaiting_capture', 'yes' );
 					$order->payment_complete();
 				}
 
